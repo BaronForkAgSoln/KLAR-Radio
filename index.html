@@ -370,6 +370,11 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
+const ADMIN_UID = 'tpa416QvV4U4wK51PHwkNvmaKVt1';
+function isAdmin(){
+  return !!(auth.currentUser && auth.currentUser.uid === ADMIN_UID);
+}
+
 /* ---------------- Data layer (Firestore + Storage) ---------------- */
 function sanitizeFilename(name){
   return name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -493,37 +498,42 @@ function setActiveFolder(id){
 
 /* ---------------- Rendering ---------------- */
 function renderPresets(){
+  const admin = isAdmin();
   presetsRow.innerHTML = '';
   folders.forEach((f) => {
     const div = document.createElement('div');
     div.className = 'preset' + (f.id === activeFolderId ? ' active' : '');
     div.dataset.id = f.id;
     div.innerHTML = `
-      <button class="menu-btn" data-menu="${f.id}">&#8942;</button>
+      ${admin ? `<button class="menu-btn" data-menu="${f.id}">&#8942;</button>` : ''}
       <div class="name">${escapeHtml(f.name)}</div>
     `;
     div.addEventListener('click', (e) => {
       if(e.target.closest('.menu-btn')) return;
       setActiveFolder(f.id);
     });
-    div.addEventListener('dragover', (e)=>{ e.preventDefault(); div.classList.add('dragover'); });
-    div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
-    div.addEventListener('drop', (e)=>{
-      e.preventDefault(); div.classList.remove('dragover');
-      handleFilesDropped(e.dataTransfer.files, f.id);
-    });
-    div.querySelector('.menu-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openFolderMenu(f);
-    });
+    if(admin){
+      div.addEventListener('dragover', (e)=>{ e.preventDefault(); div.classList.add('dragover'); });
+      div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+      div.addEventListener('drop', (e)=>{
+        e.preventDefault(); div.classList.remove('dragover');
+        handleFilesDropped(e.dataTransfer.files, f.id);
+      });
+      div.querySelector('.menu-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFolderMenu(f);
+      });
+    }
     presetsRow.appendChild(div);
   });
 
-  const addTile = document.createElement('div');
-  addTile.className = 'preset new-station';
-  addTile.innerHTML = `<div class="plus">+</div><div class="name">New Program</div>`;
-  addTile.addEventListener('click', openNewFolderModal);
-  presetsRow.appendChild(addTile);
+  if(admin){
+    const addTile = document.createElement('div');
+    addTile.className = 'preset new-station';
+    addTile.innerHTML = `<div class="plus">+</div><div class="name">New Program</div>`;
+    addTile.addEventListener('click', openNewFolderModal);
+    presetsRow.appendChild(addTile);
+  }
 }
 
 function renderStationView(){
@@ -541,15 +551,16 @@ function renderStationView(){
     return;
   }
 
+  const admin = isAdmin();
   stationView.innerHTML = `
     <div class="station-header">
       <h2>${escapeHtml(folder.name)}</h2>
       <div style="display:flex; gap:8px;">
         <button class="add-tracks-btn" id="playAllBtn">&#9654; Play All</button>
-        <button class="add-tracks-btn" id="addTracksBtn">+ Add tracks</button>
+        ${admin ? `<button class="add-tracks-btn" id="addTracksBtn">+ Add tracks</button>` : ''}
       </div>
     </div>
-    <div class="dropzone" id="stationDropzone">Drop audio files here, or use "Add tracks"</div>
+    ${admin ? `<div class="dropzone" id="stationDropzone">Drop audio files here, or use "Add tracks"</div>` : ''}
     <div class="track-list" id="trackList"></div>
   `;
 
@@ -566,29 +577,33 @@ function renderStationView(){
           <div class="title">${escapeHtml(t.title)}</div>
           <div class="sub">${escapeHtml(t.artist || 'Unknown Artist')} &middot; ${formatDate(t.createdAt)}</div>
         </div>
+        ${admin ? `
         <div class="reorder">
           <button class="move-up" title="Move up" ${idx===0?'disabled':''}>&#9650;</button>
           <button class="move-down" title="Move down" ${idx===activeTracks.length-1?'disabled':''}>&#9660;</button>
         </div>
         <button class="del" title="Remove">&times;</button>
+        ` : ''}
       `;
       row.addEventListener('click', (e) => {
         if(e.target.closest('.del') || e.target.closest('.reorder')) return;
         continuousMode = false;
         playTrackAt(idx);
       });
-      row.querySelector('.move-up').addEventListener('click', (e) => {
-        e.stopPropagation();
-        moveTrack(idx, -1);
-      });
-      row.querySelector('.move-down').addEventListener('click', (e) => {
-        e.stopPropagation();
-        moveTrack(idx, 1);
-      });
-      row.querySelector('.del').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await deleteTrack(t.id);
-      });
+      if(admin){
+        row.querySelector('.move-up').addEventListener('click', (e) => {
+          e.stopPropagation();
+          moveTrack(idx, -1);
+        });
+        row.querySelector('.move-down').addEventListener('click', (e) => {
+          e.stopPropagation();
+          moveTrack(idx, 1);
+        });
+        row.querySelector('.del').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await deleteTrack(t.id);
+        });
+      }
       list.appendChild(row);
     });
   }
@@ -598,14 +613,16 @@ function renderStationView(){
     continuousMode = true;
     playTrackAt(0);
   });
-  document.getElementById('addTracksBtn').addEventListener('click', () => triggerFilePicker(activeFolderId));
-  const dz = document.getElementById('stationDropzone');
-  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
-  dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
-  dz.addEventListener('drop', (e)=>{
-    e.preventDefault(); dz.classList.remove('dragover');
-    handleFilesDropped(e.dataTransfer.files, activeFolderId);
-  });
+  if(admin){
+    document.getElementById('addTracksBtn').addEventListener('click', () => triggerFilePicker(activeFolderId));
+    const dz = document.getElementById('stationDropzone');
+    dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+    dz.addEventListener('drop', (e)=>{
+      e.preventDefault(); dz.classList.remove('dragover');
+      handleFilesDropped(e.dataTransfer.files, activeFolderId);
+    });
+  }
 }
 
 /* ---------------- Folder modals ---------------- */
