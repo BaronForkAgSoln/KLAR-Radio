@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KLAR Radio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+<style>
+  :root{
+    --bg: #1B1D24;
+    --panel: #23262E;
+    --panel-raised: #2B2E38;
+    --hairline: #383B45;
+    --cream: #EDE6D6;
+    --muted: #8A8D97;
+    --brass: #C9972E;
+    --brass-dim: #8A6C24;
+    --needle: #B23A2F;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'Work Sans', sans-serif;
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+  .dial-num{ font-family:'Oswald',sans-serif; font-variant-numeric: tabular-nums; letter-spacing:0.5px; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:relative;
+    padding: 28px 24px 18px;
+    text-align:center;
+    border-bottom: 1px solid var(--hairline);
+  }
+  header h1{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size: 30px;
+    letter-spacing: 4px;
+    margin: 0;
+    color: var(--cream);
+  }
+  header h1 span{ color: var(--brass); }
+  header .tag{
+    margin-top:4px;
+    font-size:12px;
+    letter-spacing:2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .sign-out-btn{
+    position:absolute; top:24px; right:20px;
+    background:none; border:1px solid var(--hairline); color:var(--muted);
+    font-size:11px; padding:6px 10px; border-radius:5px; cursor:pointer; font-family:'Work Sans',sans-serif;
+  }
+  .sign-out-btn:hover{ color:var(--cream); border-color:var(--brass); }
+
+  /* ---------- Main layout ---------- */
+  main{ flex:1; padding: 22px 20px 140px; max-width: 760px; margin: 0 auto; width:100%; }
+
+  /* ---------- Station presets ---------- */
+  .presets-wrap{ margin-bottom: 26px; }
+  .presets-row{
+    display:flex;
+    gap:12px;
+    overflow-x:auto;
+    padding: 4px 2px 16px;
+    scrollbar-width: thin;
+  }
+  .preset{
+    flex: 0 0 auto;
+    width: 128px;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 14px 10px 10px;
+    cursor:pointer;
+    position:relative;
+    transition: border-color .15s, transform .1s;
+  }
+  .preset:hover{ border-color: var(--brass-dim); transform: translateY(-1px); }
+  .preset.active{ border-color: var(--brass); background: var(--panel-raised); }
+  .preset .name{
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight:500;
+    color: var(--cream);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .preset .menu-btn{
+    position:absolute; top:6px; right:6px;
+    width:20px; height:20px; border:none; background:transparent;
+    color:var(--muted); cursor:pointer; font-size:14px; line-height:1;
+    border-radius:4px;
+  }
+  .preset .menu-btn:hover{ background: rgba(255,255,255,0.08); color:var(--cream); }
+  .preset.dragover{ border-color: var(--needle); box-shadow: 0 0 0 1px var(--needle); }
+
+  .preset.new-station{
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column;
+    border-style:dashed;
+    color: var(--muted);
+  }
+  .preset.new-station:hover{ color: var(--brass); border-color: var(--brass-dim); }
+  .preset.new-station .plus{ font-size:22px; font-family:'Oswald',sans-serif; }
+  .preset.new-station .name{ color:inherit; }
+
+  /* ---------- Folder / station view ---------- */
+  .station-header{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom: 12px;
+  }
+  .station-header h2{
+    font-family:'Oswald',sans-serif;
+    font-size: 20px; font-weight:600; margin:0;
+    color: var(--cream);
+  }
+  .add-tracks-btn{
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    color: var(--cream);
+    font-family:'Work Sans',sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor:pointer;
+  }
+  .add-tracks-btn:hover{ border-color: var(--brass); }
+
+  .dropzone{
+    border: 1px dashed var(--hairline);
+    border-radius: 6px;
+    padding: 22px;
+    text-align:center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 16px;
+    transition: border-color .15s, color .15s;
+  }
+  .dropzone.dragover{ border-color: var(--needle); color: var(--cream); }
+
+  .track-list{ display:flex; flex-direction:column; gap:1px; }
+  .track-row{
+    display:flex; align-items:center; gap:12px;
+    background: var(--panel);
+    padding: 10px 12px;
+    border-radius: 4px;
+    cursor:pointer;
+    border: 1px solid transparent;
+  }
+  .track-row:hover{ border-color: var(--hairline); }
+  .track-row.playing{ border-color: var(--brass); background: var(--panel-raised); }
+  .track-row .idx{ width:18px; color:var(--muted); font-size:12px; font-family:'Oswald',sans-serif; }
+  .track-row .meta{ flex:1; min-width:0; }
+  .track-row .title{ font-size:14px; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-row .sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .track-row .del{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px;
+  }
+  .track-row .del:hover{ color: var(--needle); }
+  .track-row .reorder{ display:flex; flex-direction:column; gap:1px; }
+  .track-row .reorder button{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:10px; padding:1px 4px; line-height:1;
+  }
+  .track-row .reorder button:hover:not(:disabled){ color: var(--brass); }
+  .track-row .reorder button:disabled{ opacity:0.25; cursor:default; }
+
+  .empty-state{
+    text-align:center; padding: 50px 20px; color: var(--muted);
+  }
+  .empty-state .big{ font-family:'Oswald',sans-serif; color:var(--cream); font-size:17px; margin-bottom:6px; }
+
+  /* ---------- Upload review panel ---------- */
+  .overlay{
+    position:fixed; inset:0; background: rgba(10,11,14,0.72);
+    display:flex; align-items:center; justify-content:center;
+    z-index:50; padding: 20px;
+  }
+  .overlay.hidden{ display:none; }
+  .review-panel{
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    width: 100%; max-width: 480px;
+    max-height: 80vh;
+    display:flex; flex-direction:column;
+  }
+  .review-panel h3{
+    font-family:'Oswald',sans-serif; margin:0; padding: 16px 18px; font-size:16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .review-list{ overflow-y:auto; padding: 10px 18px; flex:1; }
+  .review-item{ padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+  .review-item:last-child{ border-bottom:none; }
+  .review-item .fname{ font-size:13px; color:var(--cream); margin-bottom:6px; }
+  .review-item input{
+    width:100%; background: var(--bg); border:1px solid var(--hairline); color:var(--cream);
+    padding: 7px 9px; border-radius:4px; font-size:13px; font-family:'Work Sans',sans-serif;
+  }
+  .review-item input::placeholder{ color: var(--muted); }
+  .review-actions{ display:flex; gap:10px; padding: 14px 18px; border-top:1px solid var(--hairline); }
+  .review-actions button{
+    flex:1; padding:10px; border-radius:5px; border:1px solid var(--hairline);
+    background: var(--bg); color:var(--cream); font-family:'Work Sans',sans-serif; font-size:13px; cursor:pointer;
+  }
+  .review-actions button.primary{ background: var(--brass); border-color:var(--brass); color:#1B1D24; font-weight:600; }
+  .review-actions button:disabled{ opacity:0.6; cursor:default; }
+
+  /* generic small modal for folder name / auth */
+  .mini-modal{
+    background: var(--panel); border:1px solid var(--hairline); border-radius:8px;
+    padding: 18px; width:100%; max-width: 320px;
+  }
+  .mini-modal h3{ margin:0 0 12px; font-family:'Oswald',sans-serif; font-size:15px; }
+  .mini-modal input{
+    width:100%; background: var(--bg); border:1px solid var(--hairline); color:var(--cream);
+    padding: 9px 10px; border-radius:4px; font-size:13px; font-family:'Work Sans',sans-serif; margin-bottom:14px;
+  }
+  .mini-modal .row{ display:flex; gap:10px; }
+  .mini-modal button{
+    flex:1; padding:9px; border-radius:5px; border:1px solid var(--hairline);
+    background: var(--bg); color:var(--cream); cursor:pointer; font-family:'Work Sans',sans-serif; font-size:13px;
+  }
+  .mini-modal button.primary{ background: var(--brass); border-color:var(--brass); color:#1B1D24; font-weight:600; }
+  .mini-modal button.danger{ background: var(--needle); border-color:var(--needle); color:#fff; }
+  .mini-modal button:disabled{ opacity:0.6; cursor:default; }
+
+  /* ---------- Auth screen ---------- */
+  #authScreen{
+    position:fixed; inset:0; background: var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    z-index:200;
+  }
+  .auth-card{ text-align:center; }
+  .auth-card h1{
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:26px; letter-spacing:4px; margin:0 0 4px;
+  }
+  .auth-card h1 span{ color: var(--brass); }
+  .auth-card .tag{ font-size:11px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-bottom:20px; }
+  #authError{ color: var(--needle); font-size:12px; margin:-6px 0 12px; min-height:14px; text-align:left; }
+  body.signed-out main{ display:none; }
+  body.signed-out .player-bar{ display:none; }
+  body:not(.signed-out) #authScreen{ display:none; }
+
+  /* ---------- Player bar ---------- */
+  .player-bar{
+    position:fixed; left:0; right:0; bottom:0;
+    background: var(--panel-raised);
+    border-top: 1px solid var(--hairline);
+    padding: 10px 18px 14px;
+  }
+  .player-inner{ max-width: 760px; margin: 0 auto; }
+  .now-playing{ display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  .np-meta{ flex:1; min-width:0; }
+  .np-title{ font-size:13px; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .np-sub{ font-size:11px; color:var(--muted); margin-top:1px; }
+  .transport{ display:flex; align-items:center; gap:10px; }
+  .transport button{
+    background:none; border:1px solid var(--hairline); color:var(--cream);
+    width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:14px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .transport button:hover{ border-color: var(--brass); }
+  .transport button.play-btn{ width:40px; height:40px; background: var(--brass); border-color:var(--brass); color:#1B1D24; font-size:16px; }
+  .seek-row{ display:flex; align-items:center; gap:10px; }
+  .seek-row span{ font-size:10px; color:var(--muted); font-family:'Oswald',sans-serif; width:34px; text-align:center; }
+  input[type=range]{
+    -webkit-appearance:none; flex:1; height:3px; background: var(--hairline); border-radius:2px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background: var(--brass); cursor:pointer;
+    margin-top:-4.5px;
+  }
+  input[type=range]#volumeSlider{ max-width:80px; flex:none; }
+
+  .hint{ font-size:11px; color:var(--muted); text-align:center; margin-top:24px; }
+
+  ::-webkit-scrollbar{ height:6px; width:6px; }
+  ::-webkit-scrollbar-thumb{ background: var(--hairline); border-radius:3px; }
+</style>
+</head>
+<body class="signed-out">
+
+<div id="authScreen">
+  <div class="auth-card">
+    <h1>KLAR <span>RADIO</span></h1>
+    <div class="tag">Family Wavelength</div>
+    <div class="mini-modal" style="text-align:left;">
+      <input type="email" id="authEmail" placeholder="Email" autocomplete="username">
+      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+      <div id="authError"></div>
+      <button class="primary" id="signInBtn" style="width:100%;">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <button class="sign-out-btn" id="signOutBtn">Sign Out</button>
+  <h1>KLAR <span>RADIO</span></h1>
+  <div class="tag">Family Wavelength</div>
+</header>
+
+<main>
+  <div class="presets-wrap">
+    <div class="presets-row" id="presetsRow"></div>
+  </div>
+
+  <div id="stationView"></div>
+
+  <div class="hint" id="storageHint">Synced to your KLAR Radio family library.</div>
+</main>
+
+<div class="player-bar">
+  <div class="player-inner">
+    <div class="now-playing">
+      <div class="np-meta">
+        <div class="np-title" id="npTitle">Nothing tuned in</div>
+        <div class="np-sub" id="npSub">Pick a program and press play</div>
+      </div>
+      <div class="transport">
+        <button id="prevBtn" title="Previous">&#9664;&#9664;</button>
+        <button id="playBtn" class="play-btn" title="Play/Pause">&#9654;</button>
+        <button id="nextBtn" title="Next">&#9654;&#9654;</button>
+      </div>
+    </div>
+    <div class="seek-row">
+      <span id="curTime">0:00</span>
+      <input type="range" id="seekSlider" value="0" min="0" max="100" step="0.1">
+      <span id="durTime">0:00</span>
+      <input type="range" id="volumeSlider" value="80" min="0" max="100" step="1" title="Volume">
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="overlayRoot"></div>
+
+<audio id="audioEl"></audio>
+
+<script>
+/* ---------------- Firebase setup ---------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCOsa0OBSGBRNisAYezKj-hxQnCzExdQHw",
+  authDomain: "klar-radio.firebaseapp.com",
+  projectId: "klar-radio",
+  storageBucket: "klar-radio.firebasestorage.app",
+  messagingSenderId: "387880368137",
+  appId: "1:387880368137:web:1a8b090aec8add48a8a0d8"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+/* ---------------- Data layer (Firestore + Storage) ---------------- */
+function sanitizeFilename(name){
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function addFolder(name){
+  return db.collection('folders').add({
+    name,
+    createdAt: Date.now(),
+    createdBy: auth.currentUser ? auth.currentUser.uid : null
+  }).then(ref => ref.id);
+}
+function renameFolder(id, name){
+  return db.collection('folders').doc(id).update({ name });
+}
+async function deleteFolder(id){
+  const snap = await db.collection('tracks').where('folderId','==',id).get();
+  await Promise.all(snap.docs.map(async d => {
+    const data = d.data();
+    if(data.storagePath){
+      try{ await storage.ref().child(data.storagePath).delete(); }catch(e){ console.warn('Storage delete failed', e); }
+    }
+    await d.ref.delete();
+  }));
+  await db.collection('folders').doc(id).delete();
+}
+
+async function addTrack({ folderId, title, artist, file }){
+  const path = `tracks/${folderId}/${Date.now()}_${sanitizeFilename(file.name)}`;
+  const ref = storage.ref().child(path);
+  const snapshot = await ref.put(file);
+  const downloadURL = await snapshot.ref.getDownloadURL();
+  const docRef = await db.collection('tracks').add({
+    folderId,
+    title,
+    artist: artist || '',
+    createdAt: Date.now(),
+    order: Date.now(),
+    createdBy: auth.currentUser ? auth.currentUser.uid : null,
+    storagePath: path,
+    downloadURL,
+    type: file.type || 'audio/mpeg',
+    size: file.size
+  });
+  return docRef.id;
+}
+function trackOrderVal(t){ return (t.order !== undefined && t.order !== null) ? t.order : (t.createdAt || 0); }
+async function moveTrack(idx, direction){
+  const otherIdx = idx + direction;
+  if(otherIdx < 0 || otherIdx >= activeTracks.length) return;
+  const a = activeTracks[idx], b = activeTracks[otherIdx];
+  const aOrder = trackOrderVal(a), bOrder = trackOrderVal(b);
+  const batch = db.batch();
+  batch.update(db.collection('tracks').doc(a.id), { order: bOrder });
+  batch.update(db.collection('tracks').doc(b.id), { order: aOrder });
+  await batch.commit();
+}
+async function deleteTrack(id){
+  const doc = await db.collection('tracks').doc(id).get();
+  const data = doc.data();
+  if(data && data.storagePath){
+    try{ await storage.ref().child(data.storagePath).delete(); }catch(e){ console.warn('Storage delete failed', e); }
+  }
+  await db.collection('tracks').doc(id).delete();
+}
+
+/* ---------------- App state ---------------- */
+let folders = [];
+let activeFolderId = null;
+let activeTracks = [];
+let currentTrackIndex = -1;
+let currentTrackId = null;
+let continuousMode = false;
+let pendingFiles = [];
+let unsubFolders = null;
+let unsubTracks = null;
+
+const audioEl = document.getElementById('audioEl');
+const presetsRow = document.getElementById('presetsRow');
+const stationView = document.getElementById('stationView');
+const overlayRoot = document.getElementById('overlayRoot');
+const authScreen = document.getElementById('authScreen');
+
+/* ---------------- Realtime listeners ---------------- */
+function startFoldersListener(){
+  stopAllListeners();
+  unsubFolders = db.collection('folders').onSnapshot(snapshot => {
+    folders = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    if(activeFolderId !== null && !folders.find(f=>f.id===activeFolderId)){
+      activeFolderId = null;
+      if(unsubTracks){ unsubTracks(); unsubTracks = null; }
+      activeTracks = [];
+      currentTrackIndex = -1;
+    }
+    renderPresets();
+    renderStationView();
+  }, err => console.error('folders listener error', err));
+}
+function stopAllListeners(){
+  if(unsubFolders){ unsubFolders(); unsubFolders = null; }
+  if(unsubTracks){ unsubTracks(); unsubTracks = null; }
+}
+
+function setActiveFolder(id){
+  activeFolderId = id;
+  activeTracks = [];
+  currentTrackIndex = -1;
+  currentTrackId = null;
+  continuousMode = false;
+  if(unsubTracks){ unsubTracks(); unsubTracks = null; }
+  renderPresets();
+  renderStationView();
+  if(id !== null){
+    unsubTracks = db.collection('tracks').where('folderId','==',id).onSnapshot(snapshot => {
+      activeTracks = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>trackOrderVal(a)-trackOrderVal(b));
+      currentTrackIndex = currentTrackId ? activeTracks.findIndex(t => t.id === currentTrackId) : -1;
+      renderStationView();
+    }, err => console.error('tracks listener error', err));
+  }
+}
+
+/* ---------------- Rendering ---------------- */
+function renderPresets(){
+  presetsRow.innerHTML = '';
+  folders.forEach((f) => {
+    const div = document.createElement('div');
+    div.className = 'preset' + (f.id === activeFolderId ? ' active' : '');
+    div.dataset.id = f.id;
+    div.innerHTML = `
+      <button class="menu-btn" data-menu="${f.id}">&#8942;</button>
+      <div class="name">${escapeHtml(f.name)}</div>
+    `;
+    div.addEventListener('click', (e) => {
+      if(e.target.closest('.menu-btn')) return;
+      setActiveFolder(f.id);
+    });
+    div.addEventListener('dragover', (e)=>{ e.preventDefault(); div.classList.add('dragover'); });
+    div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+    div.addEventListener('drop', (e)=>{
+      e.preventDefault(); div.classList.remove('dragover');
+      handleFilesDropped(e.dataTransfer.files, f.id);
+    });
+    div.querySelector('.menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFolderMenu(f);
+    });
+    presetsRow.appendChild(div);
+  });
+
+  const addTile = document.createElement('div');
+  addTile.className = 'preset new-station';
+  addTile.innerHTML = `<div class="plus">+</div><div class="name">New Program</div>`;
+  addTile.addEventListener('click', openNewFolderModal);
+  presetsRow.appendChild(addTile);
+}
+
+function renderStationView(){
+  if(activeFolderId === null){
+    stationView.innerHTML = `
+      <div class="empty-state">
+        <div class="big">No program tuned in</div>
+        <div>Pick a preset above, or create a new program to get started.</div>
+      </div>`;
+    return;
+  }
+  const folder = folders.find(f=>f.id===activeFolderId);
+  if(!folder){
+    stationView.innerHTML = `<div class="empty-state"><div class="big">Loading&hellip;</div></div>`;
+    return;
+  }
+
+  stationView.innerHTML = `
+    <div class="station-header">
+      <h2>${escapeHtml(folder.name)}</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="add-tracks-btn" id="playAllBtn">&#9654; Play All</button>
+        <button class="add-tracks-btn" id="addTracksBtn">+ Add tracks</button>
+      </div>
+    </div>
+    <div class="dropzone" id="stationDropzone">Drop audio files here, or use "Add tracks"</div>
+    <div class="track-list" id="trackList"></div>
+  `;
+
+  const list = document.getElementById('trackList');
+  if(activeTracks.length === 0){
+    list.innerHTML = `<div class="empty-state"><div class="big">Nothing playing here yet</div><div>Add a few songs to fill out this program.</div></div>`;
+  } else {
+    activeTracks.forEach((t, idx) => {
+      const row = document.createElement('div');
+      row.className = 'track-row' + (currentTrackIndex===idx ? ' playing':'');
+      row.innerHTML = `
+        <div class="idx">${idx+1}</div>
+        <div class="meta">
+          <div class="title">${escapeHtml(t.title)}</div>
+          <div class="sub">${escapeHtml(t.artist || 'Unknown Artist')} &middot; ${formatDate(t.createdAt)}</div>
+        </div>
+        <div class="reorder">
+          <button class="move-up" title="Move up" ${idx===0?'disabled':''}>&#9650;</button>
+          <button class="move-down" title="Move down" ${idx===activeTracks.length-1?'disabled':''}>&#9660;</button>
+        </div>
+        <button class="del" title="Remove">&times;</button>
+      `;
+      row.addEventListener('click', (e) => {
+        if(e.target.closest('.del') || e.target.closest('.reorder')) return;
+        continuousMode = false;
+        playTrackAt(idx);
+      });
+      row.querySelector('.move-up').addEventListener('click', (e) => {
+        e.stopPropagation();
+        moveTrack(idx, -1);
+      });
+      row.querySelector('.move-down').addEventListener('click', (e) => {
+        e.stopPropagation();
+        moveTrack(idx, 1);
+      });
+      row.querySelector('.del').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await deleteTrack(t.id);
+      });
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById('playAllBtn').addEventListener('click', () => {
+    if(activeTracks.length === 0) return;
+    continuousMode = true;
+    playTrackAt(0);
+  });
+  document.getElementById('addTracksBtn').addEventListener('click', () => triggerFilePicker(activeFolderId));
+  const dz = document.getElementById('stationDropzone');
+  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+  dz.addEventListener('drop', (e)=>{
+    e.preventDefault(); dz.classList.remove('dragover');
+    handleFilesDropped(e.dataTransfer.files, activeFolderId);
+  });
+}
+
+/* ---------------- Folder modals ---------------- */
+function openNewFolderModal(){
+  overlayRoot.innerHTML = `
+    <div class="mini-modal">
+      <h3>Name your program</h3>
+      <input type="text" id="folderNameInput" placeholder="e.g. Road Trip, Sunday Morning" maxlength="40">
+      <div class="row">
+        <button id="cancelFolder">Cancel</button>
+        <button class="primary" id="createFolder">Create</button>
+      </div>
+    </div>`;
+  overlayRoot.classList.remove('hidden');
+  const input = document.getElementById('folderNameInput');
+  input.focus();
+  const close = () => overlayRoot.classList.add('hidden');
+  document.getElementById('cancelFolder').addEventListener('click', close);
+  overlayRoot.addEventListener('click', (e)=>{ if(e.target===overlayRoot) close(); });
+  const create = async () => {
+    const name = input.value.trim();
+    if(!name) return;
+    const btn = document.getElementById('createFolder');
+    btn.disabled = true;
+    const id = await addFolder(name);
+    close();
+    setActiveFolder(id);
+  };
+  document.getElementById('createFolder').addEventListener('click', create);
+  input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') create(); });
+}
+
+function openFolderMenu(folder){
+  overlayRoot.innerHTML = `
+    <div class="mini-modal">
+      <h3>${escapeHtml(folder.name)}</h3>
+      <input type="text" id="renameInput" value="${escapeHtml(folder.name)}" maxlength="40">
+      <div class="row">
+        <button class="danger" id="deleteFolderBtn">Delete program</button>
+        <button class="primary" id="saveRenameBtn">Save name</button>
+      </div>
+    </div>`;
+  overlayRoot.classList.remove('hidden');
+  const close = () => overlayRoot.classList.add('hidden');
+  overlayRoot.addEventListener('click', (e)=>{ if(e.target===overlayRoot) close(); });
+  document.getElementById('saveRenameBtn').addEventListener('click', async () => {
+    const val = document.getElementById('renameInput').value.trim();
+    if(val){ await renameFolder(folder.id, val); }
+    close();
+  });
+  document.getElementById('deleteFolderBtn').addEventListener('click', async () => {
+    if(confirm(`Delete "${folder.name}" and all its tracks? This can't be undone.`)){
+      await deleteFolder(folder.id);
+      close();
+    }
+  });
+}
+
+/* ---------------- Upload flow ---------------- */
+let filePicker = document.createElement('input');
+filePicker.type = 'file';
+filePicker.accept = 'audio/*';
+filePicker.multiple = true;
+let filePickerTargetFolder = null;
+filePicker.addEventListener('change', () => {
+  if(filePicker.files.length){
+    openReviewPanel(Array.from(filePicker.files), filePickerTargetFolder);
+  }
+  filePicker.value = '';
+});
+function triggerFilePicker(folderId){
+  filePickerTargetFolder = folderId;
+  filePicker.click();
+}
+function handleFilesDropped(fileList, folderId){
+  const files = Array.from(fileList).filter(f => f.type.startsWith('audio/'));
+  if(files.length) openReviewPanel(files, folderId);
+}
+
+function guessArtistTitle(filename){
+  const base = filename.replace(/\.[^/.]+$/, '');
+  const parts = base.split(' - ');
+  if(parts.length >= 2){
+    return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
+  }
+  return { artist: '', title: base.trim() };
+}
+
+function openReviewPanel(files, folderId){
+  pendingFiles = files.map(f => {
+    const guess = guessArtistTitle(f.name);
+    return { file: f, artist: guess.artist, title: guess.title };
+  });
+  overlayRoot.innerHTML = `
+    <div class="review-panel">
+      <h3>Add ${pendingFiles.length} track${pendingFiles.length>1?'s':''}</h3>
+      <div class="review-list" id="reviewList"></div>
+      <div class="review-actions">
+        <button id="cancelReview">Cancel</button>
+        <button class="primary" id="confirmReview">Add to program</button>
+      </div>
+    </div>`;
+  overlayRoot.classList.remove('hidden');
+  const list = document.getElementById('reviewList');
+  pendingFiles.forEach((pf, i) => {
+    const item = document.createElement('div');
+    item.className = 'review-item';
+    item.innerHTML = `
+      <div class="fname">${escapeHtml(pf.file.name)}</div>
+      <input type="text" placeholder="Artist" value="${escapeHtml(pf.artist)}" data-i="${i}">
+    `;
+    item.querySelector('input').addEventListener('input', (e) => {
+      pendingFiles[i].artist = e.target.value;
+    });
+    list.appendChild(item);
+  });
+  const close = () => { overlayRoot.classList.add('hidden'); pendingFiles = []; };
+  document.getElementById('cancelReview').addEventListener('click', close);
+  document.getElementById('confirmReview').addEventListener('click', async () => {
+    const btn = document.getElementById('confirmReview');
+    const cancelBtn = document.getElementById('cancelReview');
+    cancelBtn.disabled = true;
+    const total = pendingFiles.length;
+    for(let i=0; i<total; i++){
+      const pf = pendingFiles[i];
+      btn.disabled = true;
+      btn.textContent = total > 1 ? `Uploading ${i+1} of ${total}\u2026` : 'Uploading\u2026';
+      try{
+        await addTrack({
+          folderId,
+          title: pf.title || pf.file.name.replace(/\.[^/.]+$/, ''),
+          artist: pf.artist || '',
+          file: pf.file
+        });
+      }catch(e){
+        alert(`Couldn't upload "${pf.file.name}". ${e.message || 'Please try again.'}`);
+      }
+    }
+    close();
+  });
+}
+
+/* ---------------- Player ---------------- */
+const playBtn = document.getElementById('playBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const npTitle = document.getElementById('npTitle');
+const npSub = document.getElementById('npSub');
+const seekSlider = document.getElementById('seekSlider');
+const curTimeEl = document.getElementById('curTime');
+const durTimeEl = document.getElementById('durTime');
+const volumeSlider = document.getElementById('volumeSlider');
+
+function playTrackAt(idx){
+  if(idx < 0 || idx >= activeTracks.length) return;
+  currentTrackIndex = idx;
+  const t = activeTracks[idx];
+  currentTrackId = t.id;
+  audioEl.src = t.downloadURL;
+  audioEl.play();
+  npTitle.textContent = t.title;
+  const folderName = (folders.find(f=>f.id===activeFolderId) || {}).name || '';
+  npSub.textContent = (t.artist || 'Unknown Artist') + ' \u00b7 ' + folderName;
+  updatePlayBtn(true);
+  renderStationView();
+}
+
+function updatePlayBtn(playing){
+  playBtn.innerHTML = playing ? '&#10073;&#10073;' : '&#9654;';
+}
+
+playBtn.addEventListener('click', () => {
+  if(currentTrackIndex === -1){
+    if(activeTracks.length) playTrackAt(0);
+    return;
+  }
+  if(audioEl.paused){ audioEl.play(); updatePlayBtn(true); }
+  else { audioEl.pause(); updatePlayBtn(false); }
+});
+prevBtn.addEventListener('click', () => {
+  if(currentTrackIndex > 0) playTrackAt(currentTrackIndex - 1);
+});
+nextBtn.addEventListener('click', () => {
+  if(currentTrackIndex < activeTracks.length - 1) playTrackAt(currentTrackIndex + 1);
+});
+audioEl.addEventListener('ended', () => {
+  if(continuousMode && currentTrackIndex < activeTracks.length - 1) playTrackAt(currentTrackIndex + 1);
+  else updatePlayBtn(false);
+});
+audioEl.addEventListener('timeupdate', () => {
+  if(audioEl.duration){
+    seekSlider.value = (audioEl.currentTime / audioEl.duration) * 100;
+    curTimeEl.textContent = formatTime(audioEl.currentTime);
+    durTimeEl.textContent = formatTime(audioEl.duration);
+  }
+});
+seekSlider.addEventListener('input', () => {
+  if(audioEl.duration){
+    audioEl.currentTime = (seekSlider.value/100) * audioEl.duration;
+  }
+});
+volumeSlider.addEventListener('input', () => {
+  audioEl.volume = volumeSlider.value/100;
+});
+audioEl.volume = 0.8;
+
+/* ---------------- Utilities ---------------- */
+function formatTime(s){
+  if(!isFinite(s)) return '0:00';
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return m + ':' + String(sec).padStart(2,'0');
+}
+function formatDate(ts){
+  return new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+/* ---------------- Auth ---------------- */
+function friendlyAuthError(e){
+  switch(e.code){
+    case 'auth/invalid-email': return "That email address doesn't look right.";
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential': return 'Email or password is incorrect.';
+    case 'auth/too-many-requests': return 'Too many attempts \u2014 please wait a moment and try again.';
+    default: return 'Could not sign in. Please try again.';
+  }
+}
+async function doSignIn(){
+  const email = document.getElementById('authEmail').value.trim();
+  const pw = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  const btn = document.getElementById('signInBtn');
+  errEl.textContent = '';
+  if(!email || !pw){ errEl.textContent = 'Enter your email and password.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Signing in\u2026';
+  try{
+    await auth.signInWithEmailAndPassword(email, pw);
+  }catch(e){
+    errEl.textContent = friendlyAuthError(e);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+document.getElementById('signInBtn').addEventListener('click', doSignIn);
+document.getElementById('authPassword').addEventListener('keydown', (e) => { if(e.key === 'Enter') doSignIn(); });
+document.getElementById('authEmail').addEventListener('keydown', (e) => { if(e.key === 'Enter') doSignIn(); });
+document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
+
+auth.onAuthStateChanged(user => {
+  if(user){
+    document.body.classList.remove('signed-out');
+    startFoldersListener();
+  } else {
+    document.body.classList.add('signed-out');
+    stopAllListeners();
+    folders = [];
+    activeFolderId = null;
+    activeTracks = [];
+    currentTrackIndex = -1;
+    currentTrackId = null;
+    audioEl.src = '';
+    updatePlayBtn(false);
+    npTitle.textContent = 'Nothing tuned in';
+    npSub.textContent = 'Pick a program and press play';
+    document.getElementById('authEmail').value = '';
+    document.getElementById('authPassword').value = '';
+    document.getElementById('authError').textContent = '';
+  }
+});
+</script>
+</body>
+</html>
